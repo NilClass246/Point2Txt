@@ -1,3 +1,0 @@
-[submodule "pointnext"]
-	path = src/models/PointNeXt
-	url = https://github.com/guochengqian/PointNeXt.git
