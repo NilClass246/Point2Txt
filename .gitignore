@@ -1,0 +1,4 @@
+checkpoints/
+pretrained_checkpoints/
+models/Florence2large/
+models/__pycache__/
