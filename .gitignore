@@ -2,3 +2,9 @@ checkpoints/
 pretrained_checkpoints/
 models/Florence2large/
 models/__pycache__/
+
+PointCLIP_V2/figs/
+**/__pycache__/
+PointCLIP_V2/zeroshot_cls/data/**
+PointCLIP_V2/zeroshot_cls/prompts/*.mat
+PointCLIP_V2/zeroshot_cls/Dassl3D/build/**
