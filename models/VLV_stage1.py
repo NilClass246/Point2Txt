@@ -138,6 +138,7 @@ class SDModel(PreTrainedModel):
             return_dict=True
         )
         
+        # The split between encoding and diffusion
         last_decoder_hidden_state = decoder_outputs.last_hidden_state
         conditional_context = self.language_proj(last_decoder_hidden_state)
 

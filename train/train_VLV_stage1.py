@@ -1,3 +1,4 @@
+# TODO: Remove distributed code, since we are not using any?
 import os
 import sys
 import argparse
@@ -151,6 +152,7 @@ def get_deepspeed_config_value(config_path, key, default_value=None):
         return default_value
 
 # This if for evaluating the model with FID score on coco Validation set
+# TODO: change for 3D point cloud
 def evaluate_model(model, eval_loader, device, args, global_step=None, wandb_logger=None):
     """Evaluate the model with FID score on validation set."""
 
@@ -198,6 +200,7 @@ def clean_memory():
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
+# TODO: main train loop, change for 3D model
 def main():
     args = parse_args()
     setup_wandb_env(args.wandb_api_key)
