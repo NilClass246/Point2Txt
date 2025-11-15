@@ -34,7 +34,7 @@ from models.VLV_stage1 import SDModel
 from data import ImageDataCollator, FastImageDataset
 from torchvision import transforms
 from .utils import calculate_fid_given_paths
-from tools.metric_logging import WandBLogger
+from common_tools.metric_logging import WandBLogger
 
 logger = logging.getLogger(__name__)
 

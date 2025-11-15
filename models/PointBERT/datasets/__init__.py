@@ -1,5 +1,5 @@
 from .build import build_dataset_from_cfg
-import datasets.ShapeNet55Dataset
-import datasets.ModelNetDataset
-import datasets.ModelNetDatasetFewShot
-import datasets.ScanObjectNNDataset
+import models.PointBERT.datasets.ShapeNet55Dataset
+import models.PointBERT.datasets.ModelNetDataset
+import models.PointBERT.datasets.ModelNetDatasetFewShot
+import models.PointBERT.datasets.ScanObjectNNDataset
