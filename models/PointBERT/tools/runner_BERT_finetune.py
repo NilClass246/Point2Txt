@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
-from tools import builder
-from utils import misc, dist_utils
+from ..tools import builder
+from ..utils import misc, dist_utils
 import time
-from utils.logger import *
-from utils.AverageMeter import AverageMeter
+from ..utils.logger import *
+from ..utils.AverageMeter import AverageMeter
 
 import numpy as np
-from datasets import data_transforms
+from ..datasets import data_transforms
 from pointnet2_ops import pointnet2_utils
 from torchvision import transforms
 

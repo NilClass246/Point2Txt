@@ -4,11 +4,11 @@ import torch.nn.functional as F
 from knn_cuda import KNN
 from pointnet2_ops import pointnet2_utils
 from .build import MODELS
-from utils import misc
-from extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+from ..utils import misc
+from ..extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 # from extensions.emd import emd
-from utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
-from utils.logger import *
+from ..utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
+from ..utils.logger import *
 
 
 

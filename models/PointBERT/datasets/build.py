@@ -1,4 +1,4 @@
-from models.PointBERT.utils import registry
+from ..utils import registry
 
 
 DATASETS = registry.Registry('dataset')

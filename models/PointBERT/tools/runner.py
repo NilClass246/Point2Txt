@@ -1,13 +1,13 @@
 import torch
 import torch.nn as nn
 import json
-from models.PointBERT.tools import builder
-from models.PointBERT.utils import misc, dist_utils
+from ..tools import builder
+from ..utils import misc, dist_utils
 import time
-from models.PointBERT.utils.logger import *
-from models.PointBERT.utils.AverageMeter import AverageMeter
-from models.PointBERT.utils.metrics import Metrics
-from models.PointBERT.extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
+from ..utils.logger import *
+from ..utils.AverageMeter import AverageMeter
+from ..utils.metrics import Metrics
+from ..extensions.chamfer_dist import ChamferDistanceL1, ChamferDistanceL2
 import math
 import cv2
 import numpy as np

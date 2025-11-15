@@ -3,7 +3,7 @@ import os, sys, h5py
 from torch.utils.data import Dataset
 import torch
 from .build import DATASETS
-from utils.logger import *
+from ..utils.logger import *
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(BASE_DIR)
