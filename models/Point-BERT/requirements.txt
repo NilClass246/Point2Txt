@@ -9,7 +9,7 @@ opencv-python
 pyyaml
 scipy
 tensorboardX
-timm==0.4.5 
+timm
 tqdm
 transforms3d
 termcolor

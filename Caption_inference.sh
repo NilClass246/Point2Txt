@@ -1,5 +1,4 @@
 #!/usr/bin/bash
-source /u/yyuntian/store/.venv/bin/activate
 rm -rf ~/.cache/torch_extensions
 export CUDA_HOME=$(dirname $(dirname $(which nvcc)))
 

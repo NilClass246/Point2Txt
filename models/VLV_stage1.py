@@ -176,9 +176,53 @@ class SDModel(PreTrainedModel):
 
         return decoded_latents
     
-    def get_conditional_context(self, images, batch_size=None):
+    # def get_conditional_context(self, images, batch_size=None):
+    #     if batch_size is None:
+    #         batch_size = self.batch_size
+    #     prompt = ["<MORE_DETAILED_CAPTION>"] * batch_size
+    #     inputs = self.processor(text=prompt, images=images, return_tensors="pt").to(self._device).to(self._dtype)
+        
+    #     if inputs["input_ids"] is not None:
+    #         inputs_embeds = self.model.language_model.get_input_embeddings()(inputs["input_ids"]).to(self._dtype)
+    #     if inputs["pixel_values"] is not None:
+    #         image_features = self.model._encode_image(inputs["pixel_values"]).to(self._dtype)
+    #         inputs_embeds, attention_mask = self.model._merge_input_ids_with_image_features(image_features, inputs_embeds)
+    #     if inputs_embeds is not None:
+    #         attention_mask = attention_mask.to(inputs_embeds.dtype)
+    #     encoder_outputs = self.model.language_model.model.encoder(
+    #         inputs_embeds=inputs_embeds,
+    #         attention_mask=attention_mask,
+    #         output_hidden_states=True,
+    #         return_dict=True
+    #     )
+        
+    #     decoder_input_embeds = self.query_embed.expand(batch_size, -1, -1)
+    #     decoder_attention_mask = torch.ones(
+    #         (batch_size, self.num_queries), 
+    #         dtype=self._dtype, 
+    #         device=self._device
+    #     )
+        
+    #     encoder_hidden_states = encoder_outputs.last_hidden_state.to(self._dtype)
+    #     decoder_input_embeds = decoder_input_embeds.to(self._dtype)
+    #     attention_mask = attention_mask.to(self._dtype)
+        
+    #     decoder_outputs = self.model.language_model.model.decoder(
+    #         inputs_embeds=decoder_input_embeds,
+    #         attention_mask=decoder_attention_mask,
+    #         encoder_hidden_states=encoder_hidden_states,
+    #         encoder_attention_mask=attention_mask,
+    #         output_hidden_states=True,
+    #         return_dict=True
+    #     )
+        
+    #     last_decoder_hidden_state = decoder_outputs.last_hidden_state
+    #     return last_decoder_hidden_state
+
+    def get_conditional_context(self, points, batch_size=None):
         if batch_size is None:
             batch_size = self.batch_size
+        # ============= replace this part with point-Bert =============
         prompt = ["<MORE_DETAILED_CAPTION>"] * batch_size
         inputs = self.processor(text=prompt, images=images, return_tensors="pt").to(self._device).to(self._dtype)
         
@@ -195,6 +239,7 @@ class SDModel(PreTrainedModel):
             output_hidden_states=True,
             return_dict=True
         )
+        # ============= replace this part with point-Bert =============
         
         decoder_input_embeds = self.query_embed.expand(batch_size, -1, -1)
         decoder_attention_mask = torch.ones(
@@ -218,7 +263,7 @@ class SDModel(PreTrainedModel):
         
         last_decoder_hidden_state = decoder_outputs.last_hidden_state
         return last_decoder_hidden_state
-    
+
     def forward(
         self,
         image=None,

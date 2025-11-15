@@ -152,4 +152,4 @@ pretrain_weight
 
 segmentation/log
 
-checkpoint/
+checkpoints/
