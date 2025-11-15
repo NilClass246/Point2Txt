@@ -9,6 +9,8 @@ from transformers.configuration_utils import PretrainedConfig
 from .build import load_sd_model, load_Florence2_model
 from .utils import initiate_time_steps, normalize
 
+from .PointBERT.model import load_point_BERT
+
 
 class SDConfig(PretrainedConfig):
     """Configuration class for SDModel."""
@@ -301,3 +303,7 @@ class SDModel(PreTrainedModel):
             loss = torch.nn.functional.mse_loss(pred_noise, noise)
             
         return SDOutput(loss=loss)
+    
+def test():
+    model = load_point_BERT()
+    print(model)

@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import time
-from tools import builder
-from utils.logger import *
-from utils.config import *
 from argparse import Namespace
+from .tools.builder import model_builder, load_model
+from .utils.logger import *
+from .utils.config import *
 
 args = Namespace(
     config="cfgs/ModelNet_models/PointTransformer.yaml",
@@ -44,10 +44,10 @@ def load_point_BERT():
     log_args_to_file(args, 'args', logger = logger)
     log_config_to_file(config, 'config', logger = logger)
 
+    # _, test_dataloader = builder.dataset_builder(args, config.dataset.test)
 
-    base_model = builder.model_builder(config.model)
-    builder.load_model(base_model, args.ckpts, logger = logger)
-
+    base_model = model_builder(config.model)
+    load_model(base_model, args.ckpts, logger = logger)
     base_model.eval()
 
     return base_model
