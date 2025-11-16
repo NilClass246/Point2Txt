@@ -8,3 +8,6 @@ PointCLIP_V2/figs/
 PointCLIP_V2/zeroshot_cls/data/**
 PointCLIP_V2/zeroshot_cls/prompts/*.mat
 PointCLIP_V2/zeroshot_cls/Dassl3D/build/**
+
+point_e_model_cache/
+data/modelnet40_normal_resampled/

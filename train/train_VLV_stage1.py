@@ -285,7 +285,7 @@ def main():
 
     train_json_file = "./image_id_train_6M.json"
     val_json_file = "./image_id_eval.json"
-
+    # This is for loading the dataset
     dataset = FastImageDataset(train_json_file, args.train_dataset_path, transform=None)
     eval_dataset = FastImageDataset(val_json_file, args.val_dataset_path, transform=None)
 
