@@ -6,7 +6,7 @@ from visualize import visualize_pointcloud_o3d, visualize_pointcloud
 
 class Cap3DShapeNetPreprocessed(Dataset):
     def __init__(self, points_path, ids_path, csv_path, transform=None):
-        self.pointclouds = torch.load(points_path)  # list of (N,3) tensors
+        self.pointclouds = torch.load(points_path)  # list of (N,6) tensors
         self.ids = json.load(open(ids_path))
         self.transform = transform
 
@@ -38,11 +38,11 @@ if __name__ == "__main__":
         csv_path="data/Cap3D_automated_ShapeNet.csv"
     )
     print(f"Dataset size: {len(dataset)}")
-    sample = dataset[1]
+    sample = dataset[0]
     print(f"Sample ID: {sample['id']}")
     print(f"Sample Points Shape: {sample['points'].shape}")
     print(f"Sample Caption: {sample['caption']}")
 
     # visualize
-    # visualize_pointcloud_o3d(sample["points"])
+    visualize_pointcloud_o3d(sample["points"])
     # visualize_pointcloud(sample["points"], title=sample["id"])

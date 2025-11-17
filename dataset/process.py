@@ -30,6 +30,7 @@ def preprocess_ply_folder(
         file_path = os.path.join(pcs_dir, ply_file)
         pcd = o3d.io.read_point_cloud(file_path)
         points = torch.from_numpy(np.asarray(pcd.points)).float()
+        colors = torch.from_numpy(np.asarray(pcd.colors)).float()
 
         if normalize:
             centroid = points.mean(dim=0)
@@ -37,7 +38,9 @@ def preprocess_ply_folder(
             max_dist = torch.max(torch.norm(points, dim=1))
             points /= max_dist
 
-        all_points.append(points)
+        colored_points = torch.cat([points, colors], dim=1)  # Combine points and colors
+
+        all_points.append(colored_points)
         all_ids.append(os.path.splitext(ply_file)[0])
 
     # all_points_tensor = torch.cat(all_points, dim=0)

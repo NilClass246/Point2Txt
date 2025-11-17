@@ -9,8 +9,12 @@ def visualize_pointcloud_o3d(pc):
     if isinstance(pc, torch.Tensor):
         pc = pc.detach().cpu().numpy()
 
+    xyz = pc[:, :3]
+    rgb = pc[:, 3:]
+
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(pc)
+    pcd.points = o3d.utility.Vector3dVector(xyz)
+    pcd.colors = o3d.utility.Vector3dVector(rgb)
     o3d.visualization.draw_geometries([pcd])
 
 def visualize_pointcloud(pc, title="Point cloud", max_points=5000):
@@ -26,11 +30,16 @@ def visualize_pointcloud(pc, title="Point cloud", max_points=5000):
         idx = np.random.choice(N, max_points, replace=False)
         pc = pc[idx]
 
-    x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
+    xyz = pc[:, :3]
+    rgb = pc[:, 3:6]
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
-    ax.scatter(x, y, z, s=1)  # s = point size
+    ax.scatter(
+        xyz[:, 0], xyz[:, 1], xyz[:, 2],
+        s=1,
+        c=rgb  # Nx3 array, each in [0,1]
+    )
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
