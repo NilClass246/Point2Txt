@@ -2,6 +2,7 @@ import json
 import torch
 import pandas as pd
 from torch.utils.data import Dataset
+from visualize import visualize_pointcloud_o3d, visualize_pointcloud
 
 class Cap3DShapeNetPreprocessed(Dataset):
     def __init__(self, points_path, ids_path, csv_path, transform=None):
@@ -41,3 +42,7 @@ if __name__ == "__main__":
     print(f"Sample ID: {sample['id']}")
     print(f"Sample Points Shape: {sample['points'].shape}")
     print(f"Sample Caption: {sample['caption']}")
+
+    # visualize
+    # visualize_pointcloud_o3d(sample["points"])
+    # visualize_pointcloud(sample["points"], title=sample["id"])
