@@ -1,0 +1,7 @@
+pyyaml
+easydict
+tqdm
+torch
+torchvision
+transformers
+termcolor
