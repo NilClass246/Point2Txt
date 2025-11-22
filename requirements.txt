@@ -5,3 +5,5 @@ torch
 torchvision
 transformers
 termcolor
+open3d
+timm

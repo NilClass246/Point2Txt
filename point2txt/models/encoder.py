@@ -1,7 +1,7 @@
 import yaml
 import os
 
-from ..models import PointTransformer
+from models import PointTransformer
 from easydict import EasyDict
 
 def cfg_from_yaml_file(cfg_file):

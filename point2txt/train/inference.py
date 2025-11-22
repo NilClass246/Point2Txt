@@ -1,12 +1,13 @@
 import torch
 import open3d as o3d
 import numpy as np
-from ..dataset.dataset import Cap3DObjaversePreprocessed, Cap3DShapeNetPreprocessed
-from ..dataset.visualize import visualize_pointcloud_o3d
-from ..models.point2txt import Point2Txt
+
 from transformers import GPT2TokenizerFast
-from ..models.llm import load_gpt2
-from ..models.encoder import load_point_encoder
+from dataset.dataset import Cap3DObjaversePreprocessed, Cap3DShapeNetPreprocessed
+from dataset.visualize import visualize_pointcloud_o3d
+from models.point2txt import Point2Txt
+from models.llm import load_gpt2
+from models.encoder import load_point_encoder
 
 @torch.no_grad()
 def generate_caption_from_points(
