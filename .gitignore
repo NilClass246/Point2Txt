@@ -2,3 +2,4 @@ dataset/data/
 dataset/ShapeNet_pcs/
 
 __pycache__/
+point_bert_v1.2.pt
