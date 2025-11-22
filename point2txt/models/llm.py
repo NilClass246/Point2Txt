@@ -20,7 +20,7 @@ def load_gpt2(device):
     if freeze_gpt2:
         for param in gpt2.parameters():
             param.requires_grad = False
-        print("GPT-2 frozen (only mapper + point encoder will train).")
+        print("GPT-2 frozen (only mapper will train).")
     else:
         print("GPT-2 will be fine-tuned.")
 

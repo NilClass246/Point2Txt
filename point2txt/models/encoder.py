@@ -30,18 +30,16 @@ def merge_new_config(config, new_config):
         merge_new_config(config[key], val)
     return config
 
-def load_point_encoder(device):
-    point_bert_config_name = "PointTransformer_8192point_2layer"
-    point_bert_config_addr = os.path.join("point2txt/models/pointbert", f"{point_bert_config_name}.yaml")
-    print(f"Loading PointBERT config from {point_bert_config_addr}.")
-    point_bert_config = cfg_from_yaml_file(point_bert_config_addr)
+def load_point_encoder(config_path, ckpt_path, device):
+    print(f"Loading PointBERT config from {config_path}.")
+    point_bert_config = cfg_from_yaml_file(config_path)
 
     point_bert_config.model.point_dims = 6  # Use 6D points (XYZ + RGB)
     use_max_pool = False
     point_encoder = PointTransformer(point_bert_config.model, use_max_pool=use_max_pool).to(device)
     print(f"Using {point_encoder.point_dims} dim of points.")
 
-    point_encoder.load_checkpoint("point2txt/models/pointbert/point_bert_v1.2.pt")
+    point_encoder.load_checkpoint(ckpt_path)
 
     backbone_output_dim = point_bert_config.model.trans_dim
     print(f"Using {backbone_output_dim} output dim of points from PointBERT.")

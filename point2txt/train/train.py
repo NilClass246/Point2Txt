@@ -1,4 +1,6 @@
 import torch
+
+from os import path
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from models.point2txt import Point2Txt
@@ -11,22 +13,31 @@ lr = 1e-4
 prefix_len = 10
 batch_size = 32
 
+config = {
+    "encoder_config_path": "models/pointbert/PointTransformer_8192point_2layer.yaml",
+    "encoder_ckpt_path": "models/pointbert/point_bert_v1.2.pt",
+    "data_path": "dataset/data/shapenet"
+}
+
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
 
     # load models
-    point_encoder, backbone_output_dim = load_point_encoder(device)
+    point_encoder, backbone_output_dim = load_point_encoder(
+        config_path=config["encoder_config_path"],
+        ckpt_path=config["encoder_ckpt_path"],
+        device=device)
     gpt2, tokenizer = load_gpt2(device)
     model = Point2Txt(point_encoder, gpt2, backbone_output_dim=backbone_output_dim, prefix_len=prefix_len).to(device)
     print("Model ready.")
 
     # load dataset
     dataset = Cap3DShapeNetPreprocessed(
-        points_path="dataset/data/shapenet/processed_points.pt",
-        ids_path="dataset/data/shapenet/point_ids.json",
-        csv_path="dataset/data/shapenet/Cap3D_automated_ShapeNet.csv",
+        points_path=path.join(config["data_path"], "processed_points.pt"),
+        ids_path=path.join(config["data_path"],"point_ids.json"),
+        csv_path=path.join(config["data_path"],"Cap3D_automated_ShapeNet.csv"),
         device =device,
     )
     collate_fn = get_collate_fn(tokenizer, device)
