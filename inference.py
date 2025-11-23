@@ -28,7 +28,7 @@ def parse_args():
     parser.add_argument("--ply_path", type=str, default=None, help="Path to a specific .ply file (overrides dataset index)")
     
     # Generation Parameters
-    parser.add_argument("--max_len", type=int, default=30, help="Max new tokens to generate")
+    parser.add_argument("--max_len", type=int, default=100, help="Max new tokens to generate")
     parser.add_argument("--beams", type=int, default=5, help="Number of beams for beam search")
     parser.add_argument("--do_sample", action="store_true", help="Use sampling instead of greedy/beam search")
     parser.add_argument("--temp", type=float, default=1.0, help="Temperature for sampling")
