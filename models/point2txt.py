@@ -35,7 +35,7 @@ class Point2Txt(nn.Module):
         B = pts.size(0)
         feats = self.point_encoder(pts)  # (B, D)
         # print(global_feat.shape)
-        global_feat = feats.mean(dim=1)
+        global_feat = feats[:, 0, :]
         mapped = self.mapper(global_feat)      # (B, prefix_len * H)
         prefix = mapped.view(B, self.prefix_len, self.gpt2.config.n_embd)
         return prefix
