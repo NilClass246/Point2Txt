@@ -72,14 +72,7 @@ def validate(model, loader, tokenizer, device, max_gen_batches=5):
     model.eval()
     total_loss = 0
     
-    try:
-        bleu_metric = evaluate.load("bleu")
-    except Exception:
-        print("Warning: Could not load 'evaluate'. BLEU will be 0.")
-        bleu_metric = None
-
-    predictions = []
-    references = []
+    bleu_metric = evaluate.load("bleu")
     
     progress = tqdm(loader, desc="Validating")
     
@@ -91,16 +84,15 @@ def validate(model, loader, tokenizer, device, max_gen_batches=5):
             attention_mask = attention_mask.to(device)
             labels[attention_mask == 0] = -100
 
-        # 1. Calculate Loss
+        # 1. Loss Calculation
         with autocast('cuda'):
             outputs = model(pts, input_ids, attention_mask, labels)
             total_loss += outputs.loss.item()
 
-        # 2. Generate Captions
+        # 2. Generation (First 5 batches only)
         if batch_idx < max_gen_batches:
             with autocast('cuda'):
                 prefix_embeds = model.encode_prefix(pts)
-                
                 B, PL, H = prefix_embeds.shape
                 gen_mask = torch.ones((B, PL), dtype=torch.long, device=device)
                 
@@ -116,21 +108,26 @@ def validate(model, loader, tokenizer, device, max_gen_batches=5):
                 
                 gen_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
                 
-                predictions.extend([t.strip() for t in gen_texts])
-                references.extend([[r] for r in raw_captions])
+                predictions = [t.strip() for t in gen_texts]
+                references = [[r] for r in raw_captions]
+
+                bleu_metric.add_batch(predictions=predictions, references=references)
 
                 if batch_idx == 0:
                     print(f"\n[Sanity Check] GT:   {raw_captions[0]}")
-                    print(f"[Sanity Check] Pred: {gen_texts[0]}\n")
+                    print(f"[Sanity Check] Pred: {predictions[0]}\n")
 
     avg_loss = total_loss / len(loader)
-    bleu_score = 0.0
     
-    if bleu_metric and predictions:
-        results = bleu_metric.compute(predictions=predictions, references=references)
-        bleu_score = results['bleu']
+    # 3. Compute Metrics
+    metrics = {"bleu1": 0.0}
+    
+    results = bleu_metric.compute(max_order=1) 
+    
+    if 'precisions' in results and len(results['precisions']) > 0:
+        metrics['bleu1'] = results['precisions'][0]
         
-    return avg_loss, bleu_score
+    return avg_loss, metrics
 
 def main():
     args = parse_args()
@@ -141,12 +138,16 @@ def main():
     os.makedirs(args.save_dir, exist_ok=True)
 
     # --- 1. Models ---
+    print("Loading Point Encoder...")
     point_encoder, backbone_output_dim = load_point_encoder(args.config_path, args.ckpt_path, device)
+    
+    print("Loading GPT-2...")
     gpt2, tokenizer = load_gpt2(device)
     
     model = Point2Txt(point_encoder, gpt2, backbone_output_dim, prefix_len=10).to(device)
 
     # --- 2. Data ---
+    print("Loading Dataset...")
     full_dataset = Cap3DShapeNetPreprocessed(
         points_path=os.path.join(args.data_path, "processed_points.pt"), 
         ids_path=os.path.join(args.data_path, "point_ids.json"),
@@ -185,25 +186,27 @@ def main():
     
     scaler = GradScaler('cuda') 
 
-    best_val_bleu = 0.0
+    best_val_score = 0.0
 
-    # --- 5. Loop ---
+    # --- 5. Training Loop ---
     for epoch in range(args.epochs):
         train_loss = train_one_epoch(model, train_loader, optimizer, scaler, device, epoch)
         
-        # Clear VRAM before validation starts
         torch.cuda.empty_cache() 
         
-        val_loss, val_bleu = validate(model, val_loader, tokenizer, device)
+        val_loss, metrics = validate(model, val_loader, tokenizer, device)
         
         scheduler.step()
-        print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val BLEU: {val_bleu:.4f}")
-
-        if val_bleu > best_val_bleu:
-            best_val_bleu = val_bleu
-            torch.save(model.state_dict(), os.path.join(args.save_dir, "best_model.pth"))
-            print(f"Saved best model (BLEU: {val_bleu:.4f})")
         
+        print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | BLEU-1: {metrics['bleu1']:.4f}")
+
+        # Save Best Model based on BLEU-1
+        if metrics['bleu1'] > best_val_score:
+            best_val_score = metrics['bleu1']
+            torch.save(model.state_dict(), os.path.join(args.save_dir, "best_model.pth"))
+            print(f"Saved best model (BLEU-1: {best_val_score:.4f})")
+        
+        # Always save latest
         torch.save(model.state_dict(), os.path.join(args.save_dir, "last_model.pth"))
 
 if __name__ == "__main__":
