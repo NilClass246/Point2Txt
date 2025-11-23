@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from models.point2txt import Point2Txt
 from models.llm import load_gpt2
 from models.encoder import load_point_encoder
-from datasets.dataset import Cap3DShapeNetPreprocessed, get_collate_fn
+from dataset.dataset import Cap3DShapeNetPreprocessed, get_collate_fn
 
 from transformers import logging as transformers_logging
 transformers_logging.set_verbosity_error()

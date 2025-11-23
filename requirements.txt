@@ -7,3 +7,8 @@ transformers
 termcolor
 open3d
 timm
+evaluate
+rouge_score
+sentence-transformers
+scikit-learn
+scipy

@@ -6,8 +6,8 @@ import os
 from os import path
 
 from transformers import GPT2TokenizerFast
-from datasets.dataset import Cap3DShapeNetPreprocessed
-from datasets.visualize import visualize_pointcloud_o3d
+from dataset.dataset import Cap3DShapeNetPreprocessed
+from dataset.visualize import visualize_pointcloud_o3d
 from models.point2txt import Point2Txt
 from models.llm import load_gpt2
 from models.encoder import load_point_encoder
