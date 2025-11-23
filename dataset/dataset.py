@@ -81,6 +81,7 @@ def get_collate_fn(tokenizer, device):
 
         # Use input_ids as labels (standard LM training)
         labels = input_ids.clone()
+        labels[attention_mask == 0] = -100
 
         return pts_batch, input_ids, attention_mask, labels, captions
 
