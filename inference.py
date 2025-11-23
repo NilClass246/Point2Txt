@@ -11,6 +11,7 @@ from dataset.visualize import visualize_pointcloud_o3d
 from models.point2txt import Point2Txt
 from models.llm import load_gpt2
 from models.encoder import load_point_encoder
+from models.pointbert.misc import fps
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Point2Text Inference")
@@ -28,7 +29,7 @@ def parse_args():
     parser.add_argument("--ply_path", type=str, default=None, help="Path to a specific .ply file (overrides dataset index)")
     
     # Generation Parameters
-    parser.add_argument("--max_len", type=int, default=100, help="Max new tokens to generate")
+    parser.add_argument("--max_len", type=int, default=30, help="Max new tokens to generate")
     parser.add_argument("--beams", type=int, default=5, help="Number of beams for beam search")
     parser.add_argument("--do_sample", action="store_true", help="Use sampling instead of greedy/beam search")
     parser.add_argument("--temp", type=float, default=1.0, help="Temperature for sampling")
@@ -51,7 +52,7 @@ def generate_caption_from_points(
     temperature: float = 1.0,
     top_k: int = 50,
     repetition_penalty: float = 1.2,
-) -> str:
+):
     """
     Robust generation function for CLIPCap/Prefix-tuning style models.
     """
@@ -73,7 +74,6 @@ def generate_caption_from_points(
     )
 
     # 4. Generate
-    # We pass inputs_embeds. The model sees these as the first tokens.
     output_ids = model.gpt2.generate(
         inputs_embeds=prefix_embeds,
         attention_mask=attention_mask,
@@ -90,27 +90,24 @@ def generate_caption_from_points(
     )
 
     # 5. Decode
-    # output_ids contains ONLY the generated tokens (because inputs_embeds was used)
     generated_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    
     return generated_text.strip()
 
-def load_custom_ply(ply_path: str) -> torch.Tensor:
+def load_custom_ply(ply_path: str, device: torch.device) -> torch.Tensor:
     if not os.path.exists(ply_path):
         raise FileNotFoundError(f"PLY file not found: {ply_path}")
         
     pcd = o3d.io.read_point_cloud(ply_path)
     points = torch.from_numpy(np.asarray(pcd.points)).float()
     
-    # Handle colors if they exist, otherwise pad with zeros or ones
+    # Handle colors
     if pcd.has_colors():
         colors = torch.from_numpy(np.asarray(pcd.colors)).float()
     else:
-        # If no color, append zeros or use intensity (optional)
         print("Warning: Point cloud has no colors. Padding with zeros.")
         colors = torch.zeros_like(points)
 
-    # Normalize points to unit sphere/box
+    # Normalize to unit sphere (matching ShapeNet preprocessing)
     centroid = points.mean(dim=0)
     points -= centroid
     max_dist = torch.max(torch.norm(points, dim=1))
@@ -120,10 +117,12 @@ def load_custom_ply(ply_path: str) -> torch.Tensor:
     # Combine points and colors (N, 6)
     colored_points = torch.cat([points, colors], dim=1) 
     
-    # Ensure sampling to 8192 if needed (Simple random sampling)
-    if colored_points.shape[0] > 8192:
-        idx = torch.randperm(colored_points.shape[0])[:8192]
-        colored_points = colored_points[idx]
+    target_points = 8192
+    if colored_points.shape[0] > target_points:
+        print(f"Downsampling from {colored_points.shape[0]} to {target_points} using FPS...")
+        pts_batch = colored_points.unsqueeze(0).to(device) 
+        sampled_pts = fps(pts_batch, target_points) # (1, 8192, 6)
+        colored_points = sampled_pts.squeeze(0).cpu()
     
     return colored_points
 
@@ -148,11 +147,9 @@ def main():
 
     # Load Trained Weights
     if path.exists(args.model_path):
-        # Use weights_only=True for security if on newer PyTorch versions
         try:
             checkpoint = torch.load(args.model_path, map_location=device, weights_only=True)
         except TypeError:
-            # Fallback for older PyTorch versions
             checkpoint = torch.load(args.model_path, map_location=device)
             
         model.load_state_dict(checkpoint)
@@ -167,7 +164,7 @@ def main():
     if args.ply_path:
         # Mode A: Custom File
         print(f"Loading custom file: {args.ply_path}")
-        pts = load_custom_ply(args.ply_path)
+        pts = load_custom_ply(args.ply_path, device)
         gt_caption = "(Custom PLY - No GT)"
     else:
         # Mode B: Dataset
@@ -177,7 +174,7 @@ def main():
                 points_path=path.join(args.data_path, "processed_points.pt"),
                 ids_path=path.join(args.data_path, "point_ids.json"),
                 csv_path=path.join(args.data_path, "Cap3D_automated_ShapeNet.csv"),
-                device=device,
+                device=torch.device("cpu"),
             )
             
             idx = args.test_idx
