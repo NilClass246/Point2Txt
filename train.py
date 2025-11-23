@@ -24,6 +24,11 @@ def set_seed(seed=42):
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=128)
@@ -163,20 +168,22 @@ def main():
     
     # --- 3. Loaders ---
     train_loader = DataLoader(
-        train_set, 
-        batch_size=args.batch_size, 
-        shuffle=True, 
-        collate_fn=collate_fn, 
-        num_workers=0
+        train_set,
+        batch_size=args.batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=0,
+        worker_init_fn=seed_worker,
     )
     
     val_batch_size = 32 
     val_loader = DataLoader(
-        val_set, 
-        batch_size=val_batch_size, 
-        shuffle=False, 
-        collate_fn=collate_fn, 
-        num_workers=0
+        val_set,
+        batch_size=val_batch_size,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=0,
+        worker_init_fn=seed_worker,
     )
 
     # --- 4. Optimization ---
