@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument("--data_path", type=str, default="data/shapenet")
     
     # Settings
-    parser.add_argument("--batch_size", type=int, default=16, help="Batch size for generation (if supported) or dataloader")
+    parser.add_argument("--batch_size", type=int, default=64, help="Batch size for generation (if supported) or dataloader")
     parser.add_argument("--num_samples", type=int, default=-1, help="Limit number of samples for quick testing (-1 for all)")
     parser.add_argument("--max_len", type=int, default=100)
     parser.add_argument("--beam_size", type=int, default=1, help="Use 1 for greedy (faster), 3+ for better quality")

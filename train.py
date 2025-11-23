@@ -25,7 +25,7 @@ def set_seed(seed=42):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--save_dir", type=str, default="checkpoints")
