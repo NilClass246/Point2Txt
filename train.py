@@ -4,6 +4,7 @@ import os
 import math
 import numpy as np
 import random
+import evaluate
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -45,6 +46,7 @@ def train_one_epoch(model, loader, optimizer, scaler, device, epoch):
         labels = labels.to(device)
         if attention_mask is not None:
             attention_mask = attention_mask.to(device)
+            labels[attention_mask == 0] = -100
 
         optimizer.zero_grad()
         
@@ -66,23 +68,69 @@ def train_one_epoch(model, loader, optimizer, scaler, device, epoch):
     return total_loss / len(loader)
 
 @torch.no_grad()
-def validate(model, loader, device):
+def validate(model, loader, tokenizer, device, max_gen_batches=5):
     model.eval()
     total_loss = 0
     
-    for pts, input_ids, attention_mask, labels, _ in tqdm(loader, desc="Validating"):
+    try:
+        bleu_metric = evaluate.load("bleu")
+    except Exception:
+        print("Warning: Could not load 'evaluate'. BLEU will be 0.")
+        bleu_metric = None
+
+    predictions = []
+    references = []
+    
+    progress = tqdm(loader, desc="Validating")
+    
+    for batch_idx, (pts, input_ids, attention_mask, labels, raw_captions) in enumerate(progress):
         pts = pts.to(device)
         input_ids = input_ids.to(device)
         labels = labels.to(device)
         if attention_mask is not None:
             attention_mask = attention_mask.to(device)
+            labels[attention_mask == 0] = -100
 
+        # 1. Calculate Loss
         with autocast('cuda'):
             outputs = model(pts, input_ids, attention_mask, labels)
+            total_loss += outputs.loss.item()
+
+        # 2. Generate Captions
+        if batch_idx < max_gen_batches:
+            with autocast('cuda'):
+                prefix_embeds = model.encode_prefix(pts)
+                
+                B, PL, H = prefix_embeds.shape
+                gen_mask = torch.ones((B, PL), dtype=torch.long, device=device)
+                
+                generated_ids = model.gpt2.generate(
+                    inputs_embeds=prefix_embeds,
+                    attention_mask=gen_mask,
+                    max_new_tokens=30,
+                    pad_token_id=tokenizer.eos_token_id,
+                    eos_token_id=tokenizer.eos_token_id,
+                    num_beams=3,
+                    early_stopping=True
+                )
+                
+                gen_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+                
+                predictions.extend([t.strip() for t in gen_texts])
+                references.extend([[r] for r in raw_captions])
+
+                if batch_idx == 0:
+                    print(f"\n[Sanity Check] GT:   {raw_captions[0]}")
+                    print(f"[Sanity Check] Pred: {gen_texts[0]}\n")
+
+    avg_loss = total_loss / len(loader)
+    bleu_score = 0.0
+    
+    if bleu_metric and predictions:
+        results = bleu_metric.compute(predictions=predictions, references=references)
+        bleu_score = results['bleu']
         
-        total_loss += outputs.loss.item()
-        
-    return total_loss / len(loader)
+    return avg_loss, bleu_score
 
 def main():
     args = parse_args()
@@ -112,30 +160,49 @@ def main():
 
     collate_fn = get_collate_fn(tokenizer, device)
     
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn, num_workers=0)
-    val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False, collate_fn=collate_fn, num_workers=0)
+    # --- 3. Loaders ---
+    train_loader = DataLoader(
+        train_set, 
+        batch_size=args.batch_size, 
+        shuffle=True, 
+        collate_fn=collate_fn, 
+        num_workers=0
+    )
+    
+    val_batch_size = 32 
+    val_loader = DataLoader(
+        val_set, 
+        batch_size=val_batch_size, 
+        shuffle=False, 
+        collate_fn=collate_fn, 
+        num_workers=0
+    )
 
-    # --- 3. Optimization ---
+    # --- 4. Optimization ---
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.01)
     scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
     
     scaler = GradScaler('cuda') 
 
-    best_val_loss = float('inf')
+    best_val_bleu = 0.0
 
-    # --- 4. Loop ---
+    # --- 5. Loop ---
     for epoch in range(args.epochs):
         train_loss = train_one_epoch(model, train_loader, optimizer, scaler, device, epoch)
-        val_loss = validate(model, val_loader, device)
+        
+        # Clear VRAM before validation starts
+        torch.cuda.empty_cache() 
+        
+        val_loss, val_bleu = validate(model, val_loader, tokenizer, device)
         
         scheduler.step()
-        print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+        print(f"Epoch {epoch} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | Val BLEU: {val_bleu:.4f}")
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        if val_bleu > best_val_bleu:
+            best_val_bleu = val_bleu
             torch.save(model.state_dict(), os.path.join(args.save_dir, "best_model.pth"))
-            print(f"Saved best model (Val Loss: {val_loss:.4f})")
+            print(f"Saved best model (BLEU: {val_bleu:.4f})")
         
         torch.save(model.state_dict(), os.path.join(args.save_dir, "last_model.pth"))
 
