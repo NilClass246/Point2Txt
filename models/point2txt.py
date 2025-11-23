@@ -16,13 +16,14 @@ class Point2Txt(nn.Module):
         self.gpt2 = gpt2
         self.prefix_len = prefix_len
 
-        point_emb_dim = backbone_output_dim
-        gpt_emb_dim = gpt2.config.n_embd
-
         # Map global point embedding -> (prefix_len * gpt_emb_dim)
         self.mapper = nn.Sequential(
-            nn.Linear(point_emb_dim, gpt_emb_dim * prefix_len),
-            nn.Tanh(),
+            nn.Linear(backbone_output_dim, 1024),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(1024, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, prefix_len * gpt2.config.n_embd)
         )
 
     def encode_prefix(self, pts: torch.Tensor) -> torch.Tensor:
