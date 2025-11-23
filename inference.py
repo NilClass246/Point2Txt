@@ -23,52 +23,59 @@ def generate_caption_from_points(
     pts: torch.Tensor,
     device: torch.device,
     max_new_tokens: int = 30,
+    num_beams: int = 1,
+    do_sample: bool = False,
     temperature: float = 1.0,
-    top_k: int = 0,
+    top_k: int = 50,
+    top_p: float = 1.0,
+    repetition_penalty: float = 1.0,
 ) -> str:
     """
-    pts: (N, C) tensor on CPU
+    Generates a caption from a point cloud using Hugging Face's generate() method.
+    
+    Args:
+        model: The Point2Txt model.
+        tokenizer: GPT2 tokenizer.
+        pts: (N, C) tensor of point cloud data.
+        device: Torch device.
+        max_new_tokens: Maximum number of tokens to generate.
+        num_beams: >1 enables beam search (better quality, slower).
+        do_sample: True enables sampling (more diverse, less repetitive).
+        temperature: Softmax temperature (lower = more deterministic).
+        top_k: Filter top-k tokens before sampling.
+        top_p: Nucleus sampling (filter by cumulative probability).
+        repetition_penalty: >1.0 penalizes repetition.
     """
     model.eval()
 
     pts = pts.unsqueeze(0).to(device)  # (1, N, C)
-    prefix = model.encode_prefix(pts)  # (1, prefix_len, H)
+    
+    prefix_embeds = model.encode_prefix(pts)
+    
+    prefix_mask = torch.ones(
+        (prefix_embeds.shape[0], prefix_embeds.shape[1]), 
+        dtype=torch.long, 
+        device=device
+    )
 
-    # Start with BOS token
-    bos_id = tokenizer.bos_token_id or tokenizer.eos_token_id
-    generated = torch.tensor([[bos_id]], dtype=torch.long, device=device)
+    output_ids = model.gpt2.generate(
+        inputs_embeds=prefix_embeds,
+        attention_mask=prefix_mask,
+        max_new_tokens=max_new_tokens,
+        pad_token_id=tokenizer.eos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        num_beams=num_beams,
+        do_sample=do_sample,
+        temperature=temperature,
+        top_k=top_k,
+        top_p=top_p,
+        repetition_penalty=repetition_penalty,
+        use_cache=True, 
+    )
 
-    for _ in range(max_new_tokens):
-        # Token embeddings for current generated sequence
-        token_embeds = model.gpt2.transformer.wte(generated)  # (1, t, H)
-
-        # Concatenate prefix + tokens
-        inputs_embeds = torch.cat([prefix, token_embeds], dim=1)  # (1, prefix_len + t, H)
-
-        outputs = model.gpt2(inputs_embeds=inputs_embeds)
-        next_token_logits = outputs.logits[:, -1, :]  # (1, vocab)
-
-        # Optionally apply temperature & top-k
-        if temperature != 1.0:
-            next_token_logits = next_token_logits / temperature
-
-        if top_k > 0:
-            values, indices = torch.topk(next_token_logits, top_k)
-            probs = torch.softmax(values, dim=-1)
-            next_token = indices[0, torch.multinomial(probs[0], num_samples=1)]
-            next_token = next_token.unsqueeze(0).unsqueeze(0)
-        else:
-            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
-
-        generated = torch.cat([generated, next_token], dim=1)
-
-        if next_token.item() == tokenizer.eos_token_id:
-            break
-
-    # Drop BOS, decode
-    caption_ids = generated[0, 1:]
-    caption = tokenizer.decode(caption_ids, skip_special_tokens=True)
-    return caption.strip()
+    generated_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    
+    return generated_text.strip()
 
 def load_ply(ply_path: str) -> torch.Tensor:
     pcd = o3d.io.read_point_cloud(ply_path)
@@ -114,15 +121,40 @@ def main():
     print("Model ready.")
 
     # Load pretrained weights
-    checkpoint = torch.load("checkpoints/test_model.pth", map_location=device, weights_only=True)
-    model.load_state_dict(checkpoint)
-    print("Pretrained weights loaded.")
+    ckpt_path = "checkpoints/test_model.pth"
+    if path.exists(ckpt_path):
+        checkpoint = torch.load(ckpt_path, map_location=device, weights_only=True)
+        model.load_state_dict(checkpoint)
+        print(f"Pretrained weights loaded from {ckpt_path}.")
+    else:
+        print(f"Warning: {ckpt_path} not found. Using random weights.")
 
-    test_pts, test_caption = dataset[10000]
-    print("Ground truth caption:", test_caption)
+    # Select a test sample
+    test_idx = 10000
+    if test_idx >= len(dataset):
+        test_idx = 0 # Fallback
+    
+    test_pts, test_caption = dataset[test_idx]
+    print("\nGround truth caption:", test_caption)
 
-    gen_caption = generate_caption_from_points(model, tokenizer, test_pts, device=device, max_new_tokens=20)
-    print("Generated caption:", gen_caption)
+    # --- Inference Strategy 1: Beam Search (Best for quality/grammar) ---
+    gen_caption_beam = generate_caption_from_points(
+        model, tokenizer, test_pts, device=device, 
+        max_new_tokens=100,
+        num_beams=5,           # Beam search with 5 beams
+        repetition_penalty=1.2 # Penalty for repeating words
+    )
+    print("Generated (Beam Search):", gen_caption_beam)
+
+    # --- Inference Strategy 2: Sampling (Best for diversity) ---
+    # gen_caption_sample = generate_caption_from_points(
+    #     model, tokenizer, test_pts, device=device, 
+    #     max_new_tokens=100,
+    #     do_sample=True,        # Enable sampling
+    #     temperature=0.8,       # Add some randomness
+    #     top_k=50               # Limit vocabulary to top 50 tokens
+    # )
+    # print("Generated (Sampling):   ", gen_caption_sample)
 
     visualize_pointcloud_o3d(test_pts)
 
