@@ -1,12 +1,12 @@
 import torch
 
-from os import path
+from os import path, makedirs
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from models.point2txt import Point2Txt
 from models.llm import load_gpt2
 from models.encoder import load_point_encoder
-from dataset.dataset import Cap3DShapeNetPreprocessed, get_collate_fn
+from datasets.dataset import Cap3DShapeNetPreprocessed, get_collate_fn
 
 num_epochs = 3
 lr = 1e-4
@@ -16,7 +16,7 @@ batch_size = 32
 config = {
     "encoder_config_path": "models/pointbert/PointTransformer_8192point_2layer.yaml",
     "encoder_ckpt_path": "models/pointbert/point_bert_v1.2.pt",
-    "data_path": "dataset/data/shapenet"
+    "data_path": "data/shapenet"
 }
 
 
@@ -28,7 +28,8 @@ def main():
     point_encoder, backbone_output_dim = load_point_encoder(
         config_path=config["encoder_config_path"],
         ckpt_path=config["encoder_ckpt_path"],
-        device=device)
+        device=device
+    )
     gpt2, tokenizer = load_gpt2(device)
     model = Point2Txt(point_encoder, gpt2, backbone_output_dim=backbone_output_dim, prefix_len=prefix_len).to(device)
     print("Model ready.")
@@ -81,7 +82,8 @@ def main():
 
         print(f"Epoch {epoch+1} finished. Avg loss: {total_loss / len(train_loader):.4f}")
 
-    torch.save(model.state_dict(), "output/test_model.pth")
+    makedirs("checkpoints", exist_ok=True)
+    torch.save(model.state_dict(), "checkpoints/test_model.pth")
 
 if __name__ == "__main__":
     main()

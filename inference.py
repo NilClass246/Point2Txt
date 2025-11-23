@@ -2,12 +2,19 @@ import torch
 import open3d as o3d
 import numpy as np
 
+from os import path
 from transformers import GPT2TokenizerFast
-from dataset.dataset import Cap3DObjaversePreprocessed, Cap3DShapeNetPreprocessed
-from dataset.visualize import visualize_pointcloud_o3d
+from datasets.dataset import Cap3DObjaversePreprocessed, Cap3DShapeNetPreprocessed
+from datasets.visualize import visualize_pointcloud_o3d
 from models.point2txt import Point2Txt
 from models.llm import load_gpt2
 from models.encoder import load_point_encoder
+
+config = {
+    "encoder_config_path": "models/pointbert/PointTransformer_8192point_2layer.yaml",
+    "encoder_ckpt_path": "models/pointbert/point_bert_v1.2.pt",
+    "data_path": "data/shapenet",
+}
 
 @torch.no_grad()
 def generate_caption_from_points(
@@ -83,27 +90,31 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # dataset = Cap3DObjaversePreprocessed(
-    #     points_path="point2txt/dataset/data/objaverse/eval_set",
-    #     ids_path="point2txt/dataset/data/objaverse/PointLLM_brief_description_val_3000_GT.json",
-    #     csv_path="point2txt/dataset/data/objaverse/Cap3D_automated_Objaverse_full.csv",
+    #     points_path="data/objaverse/eval_set",
+    #     ids_path="data/objaverse/PointLLM_brief_description_val_3000_GT.json",
+    #     csv_path="data/objaverse/Cap3D_automated_Objaverse_full.csv",
     #     device=device,
     # )
 
     dataset = Cap3DShapeNetPreprocessed(
-        points_path="point2txt/dataset/data/shapenet/processed_points.pt",
-        ids_path="point2txt/dataset/data/shapenet/point_ids.json",
-        csv_path="point2txt/dataset/data/shapenet/Cap3D_automated_ShapeNet.csv",
-        device =device,
+        points_path=path.join(config["data_path"], "processed_points.pt"),
+        ids_path=path.join(config["data_path"], "point_ids.json"),
+        csv_path=path.join(config["data_path"], "Cap3D_automated_ShapeNet.csv"),
+        device=device,
     )
 
     # load models
-    point_encoder, backbone_output_dim = load_point_encoder(device)
+    point_encoder, backbone_output_dim = load_point_encoder(
+        config_path=config["encoder_config_path"],
+        ckpt_path=config["encoder_ckpt_path"],
+        device=device
+    )
     gpt2, tokenizer = load_gpt2(device)
     model = Point2Txt(point_encoder, gpt2, backbone_output_dim=backbone_output_dim, prefix_len=10).to(device)
     print("Model ready.")
 
     # Load pretrained weights
-    checkpoint = torch.load("point2txt/checkpoints/first.pth", map_location=device, weights_only=True)
+    checkpoint = torch.load("checkpoints/test_model.pth", map_location=device, weights_only=True)
     model.load_state_dict(checkpoint)
     print("Pretrained weights loaded.")
 
