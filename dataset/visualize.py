@@ -3,7 +3,6 @@ import torch
 
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # needed for 3D projection
 
 def visualize_pointcloud_o3d(pc):
     if isinstance(pc, torch.Tensor):
