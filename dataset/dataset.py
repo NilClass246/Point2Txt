@@ -2,6 +2,7 @@ import json
 import torch
 import pandas as pd
 import numpy as np
+import os
 from torch.utils.data import Dataset
 from typing import List, Tuple
 
@@ -51,6 +52,35 @@ class Cap3DObjaversePreprocessed(Dataset):
         file_path = f"{self.points_path}/{self.ids[idx]}_8192.npy"
         pc = np.load(file_path)
         pc = torch.from_numpy(pc).to(self.device)
+        caption = self.captions[idx]
+
+        return pc, caption
+    
+class Cap3DObjaverseChunks(Dataset):
+    def __init__(self, point_map, id_map, csv_path):
+        self.point_map = json.load(open(point_map))
+        self.id_map = json.load(open(id_map))
+        self.ids = list(self.id_map.keys())
+
+        df = pd.read_csv(csv_path, names=["id", "caption"])
+        cap_dict = dict(zip(df["id"], df["caption"]))
+        self.captions = [cap_dict[i] for i in self.ids]
+
+        self.chunk_name = None
+        self.chunk = None
+
+    def __len__(self):
+        return len(self.ids)
+    
+    def __getitem__(self, idx):
+        id = self.ids[idx]
+        location = self.id_map[id]
+        if self.chunk_name != location["chunk"]:
+            point_path = self.point_map[location["chunk"]]
+            chunk = torch.load(os.path.join(point_path, location["chunk"]))
+            self.chunk = chunk
+            self.chunk_name = location["chunk"]
+        pc = self.chunk[location["index"]]
         caption = self.captions[idx]
 
         return pc, caption
