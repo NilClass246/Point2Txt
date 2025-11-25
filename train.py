@@ -13,7 +13,7 @@ from torch.amp import GradScaler, autocast
 from models.point2txt import Point2Txt
 from models.llm import load_gpt2
 from models.encoder import load_point_encoder
-from dataset.dataset import Cap3DShapeNetPreprocessed, get_collate_fn
+from dataset.dataset import Cap3DShapeNetPreprocessed, get_collate_fn, Cap3DObjaverseChunks
 
 from transformers import logging as transformers_logging
 transformers_logging.set_verbosity_error()
@@ -35,6 +35,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=2e-5)
     parser.add_argument("--save_dir", type=str, default="checkpoints")
+    parser.add_argument("--dataset", type=str, default="shapenet")
     parser.add_argument("--data_path", type=str, default="data/shapenet")
     parser.add_argument("--config_path", type=str, default="models/pointbert/PointTransformer_8192point_2layer.yaml")
     parser.add_argument("--ckpt_path", type=str, default="models/pointbert/point_bert_v1.2.pt")
@@ -153,12 +154,20 @@ def main():
 
     # --- 2. Data ---
     print("Loading Dataset...")
-    full_dataset = Cap3DShapeNetPreprocessed(
-        points_path=os.path.join(args.data_path, "processed_points.pt"), 
-        ids_path=os.path.join(args.data_path, "point_ids.json"),
-        csv_path=os.path.join(args.data_path, "Cap3D_automated_ShapeNet.csv"),
-        device=torch.device("cpu")
-    )
+    if args.dataset == "shapenet":
+        full_dataset = Cap3DShapeNetPreprocessed(
+            points_path=os.path.join(args.data_path, "processed_points.pt"), 
+            ids_path=os.path.join(args.data_path, "point_ids.json"),
+            csv_path=os.path.join(args.data_path, "Cap3D_automated_ShapeNet.csv"),
+            device=torch.device("cpu")
+        )
+    else:
+        full_dataset = Cap3DObjaverseChunks(
+            point_map=os.path.join(args.data_path, "chunk_paths.json"),
+            id_map=os.path.join(args.data_path, "chunk_records.json"),
+            csv_path=os.path.join(args.data_path, "Cap3D_automated_Objaverse_full.csv"),
+            device=torch.device("cpu")
+        )
     
     train_size = int(0.9 * len(full_dataset))
     val_size = len(full_dataset) - train_size

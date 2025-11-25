@@ -57,10 +57,11 @@ class Cap3DObjaversePreprocessed(Dataset):
         return pc, caption
     
 class Cap3DObjaverseChunks(Dataset):
-    def __init__(self, point_map, id_map, csv_path):
+    def __init__(self, point_map, id_map, csv_path, device):
         self.point_map = json.load(open(point_map))
         self.id_map = json.load(open(id_map))
         self.ids = list(self.id_map.keys())
+        self.device = device
 
         df = pd.read_csv(csv_path, names=["id", "caption"])
         cap_dict = dict(zip(df["id"], df["caption"]))
@@ -77,7 +78,7 @@ class Cap3DObjaverseChunks(Dataset):
         location = self.id_map[id]
         if self.chunk_name != location["chunk"]:
             point_path = self.point_map[location["chunk"]]
-            chunk = torch.load(os.path.join(point_path, location["chunk"]))
+            chunk = torch.load(os.path.join(point_path, location["chunk"])).to(self.device)
             self.chunk = chunk
             self.chunk_name = location["chunk"]
         pc = self.chunk[location["index"]]
