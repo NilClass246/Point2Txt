@@ -18,7 +18,7 @@ class ObjaverseDataset(Dataset):
     def __init__(self, npy_dir, json_path, num_points=8192):
         """
         Args:
-            npy_dir: Folder containing .npy files (e.g., .../eval_set)
+            npy_dir: Folder containing .npy files (e.g., .../test_set)
             json_path: Path to .json file { "uid": "caption", ... }
             num_points: Number of points to sample/ensure.
         """
@@ -80,8 +80,8 @@ def parse_args():
     
     parser.add_argument("--shapenet_data_path", type=str, default="data/shapenet")
     
-    parser.add_argument("--objaverse_npy_path", type=str, default="data/objaverse/validation/eval_set")
-    parser.add_argument("--objaverse_json_path", type=str, default="data/objaverse/validation/captions.json")
+    parser.add_argument("--objaverse_npy_path", type=str, default="data/objaverse/validation/test_set")
+    parser.add_argument("--objaverse_json_path", type=str, default="data/objaverse/validation/test_set_captions.json")
     
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--num_samples", type=int, default=-1)
