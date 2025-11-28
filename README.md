@@ -17,11 +17,11 @@ To train the Point2Text model, run the following command:
 ```bash
 python3 train.py
 ```
+To test the Point2Text model, run the following command:
+```bash
+python3 test.py
+```
 To run inference using a trained Point2Text model, run the following command:
 ```bash
 python3 inference.py
-```
-To evaluate the Point2Text model, run the following command:
-```bash
-python3 evaluation.py
 ```

@@ -69,7 +69,7 @@ def parse_args():
     parser.add_argument(
         "--dataset_type",
         type=str,
-        default="shapenet",
+        default="objaverse",
         choices=["shapenet", "objaverse"], 
         help="Choose 'shapenet' for .pt file or 'objaverse' for individual .npy files"
     )
