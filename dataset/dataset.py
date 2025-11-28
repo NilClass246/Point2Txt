@@ -1,20 +1,20 @@
 import json
 import torch
 import pandas as pd
-import numpy as np
 import os
-from torch.utils.data import Dataset
+import random
+from torch.utils.data import Dataset, IterableDataset
 from typing import List, Tuple
+from collections import defaultdict
 
 class Cap3DShapeNetPreprocessed(Dataset):
     def __init__(self, points_path, ids_path, csv_path, device, transform=None):
-        self.pointclouds = torch.load(points_path)  # list of (N,6) tensors
+        self.pointclouds = torch.load(points_path)
         self.ids = json.load(open(ids_path))
         self.transform = transform
         self.device = device
 
         df = pd.read_csv(csv_path, names=["id", "caption"])
-        print(df.head())
         cap_dict = dict(zip(df["id"], df["caption"]))
         self.captions = [cap_dict[i] for i in self.ids]
 
@@ -24,67 +24,103 @@ class Cap3DShapeNetPreprocessed(Dataset):
     def __getitem__(self, idx):
         pc = self.pointclouds[idx].to(self.device)
         caption = self.captions[idx]
-
         if self.transform:
             pc = self.transform(pc)
-
         return pc, caption
 
-class Cap3DObjaversePreprocessed(Dataset):
-    def __init__(self, points_path, ids_path, csv_path, device):
-        self.points_path = points_path
+class ObjaverseStreamingDataset(IterableDataset):
+    def __init__(self, point_map_path, id_map_path, csv_path, device, 
+                 buffer_size=1, split='train', val_ratio=0.1):
+        """
+        split: 'train', 'val', or 'all'
+        val_ratio: Fraction of chunks to reserve for validation (e.g., 0.1 = 10%)
+        """
         self.device = device
-
-        with open(ids_path, 'r') as f:
-            data = json.load(f)
-        self.ids = [item["object_id"] for item in data]
+        self.buffer_size = buffer_size
         
+        print(f"Loading metadata for split: {split}...")
+        
+        with open(point_map_path, 'r') as f:
+            self.chunk_paths = json.load(f)
+            
+        with open(id_map_path, 'r') as f:
+            records = json.load(f)
 
-        df = pd.read_csv(csv_path, names=["id", "caption"])
-        cap_dict = dict(zip(df["id"], df["caption"]))
-        self.captions = [cap_dict[i] for i in self.ids]
+        df = pd.read_csv(csv_path, names=["id", "caption"], on_bad_lines='skip')
+        self.cap_dict = dict(zip(df["id"].astype(str), df["caption"].astype(str)))
 
+        self.chunk_metadata = defaultdict(list)
+        for oid, info in records.items():
+            chunk_name = info['chunk']
+            idx = info['index']
+            if oid in self.cap_dict:
+                self.chunk_metadata[chunk_name].append((idx, oid))
+        
+        for c in self.chunk_metadata:
+            self.chunk_metadata[c].sort(key=lambda x: x[0])
 
-    def __len__(self):
-        return len(self.ids)
+        all_chunks = list(self.chunk_paths.keys())
+        valid_chunks = [
+            c for c in all_chunks 
+            if c in self.chunk_metadata and len(self.chunk_metadata[c]) > 0
+        ]
+        
+        valid_chunks.sort() 
+        
+        num_val = int(len(valid_chunks) * val_ratio)
+        num_train = len(valid_chunks) - num_val
+        
+        if split == 'train':
+            self.available_chunks = valid_chunks[:num_train]
+        elif split == 'val':
+            self.available_chunks = valid_chunks[num_train:]
+        else:
+            self.available_chunks = valid_chunks
+            
+        self.total_samples = 0
+        for c in self.available_chunks:
+            self.total_samples += len(self.chunk_metadata[c])
+            
+        print(f"[{split.upper()}] Dataset ready. Using {len(self.available_chunks)} chunks ({self.total_samples} samples).")
 
-    def __getitem__(self, idx):
-        file_path = f"{self.points_path}/{self.ids[idx]}_8192.npy"
-        pc = np.load(file_path)
-        pc = torch.from_numpy(pc).to(self.device)
-        caption = self.captions[idx]
-
-        return pc, caption
-    
-class Cap3DObjaverseChunks(Dataset):
-    def __init__(self, point_map, id_map, csv_path, device):
-        self.point_map = json.load(open(point_map))
-        self.id_map = json.load(open(id_map))
-        self.ids = list(self.id_map.keys())
-        self.device = device
-
-        df = pd.read_csv(csv_path, names=["id", "caption"])
-        cap_dict = dict(zip(df["id"], df["caption"]))
-        self.captions = [cap_dict[i] for i in self.ids]
-
-        self.chunk_name = None
-        self.chunk = None
-
-    def __len__(self):
-        return len(self.ids)
-    
-    def __getitem__(self, idx):
-        id = self.ids[idx]
-        location = self.id_map[id]
-        if self.chunk_name != location["chunk"]:
-            point_path = self.point_map[location["chunk"]]
-            chunk = torch.load(os.path.join(point_path, location["chunk"])).to(self.device)
-            self.chunk = chunk
-            self.chunk_name = location["chunk"]
-        pc = self.chunk[location["index"]]
-        caption = self.captions[idx]
-
-        return pc, caption
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        
+        if worker_info is None:
+            my_chunks = list(self.available_chunks)
+        else:
+            my_chunks = [
+                c for i, c in enumerate(self.available_chunks) 
+                if i % worker_info.num_workers == worker_info.id
+            ]
+            
+        random.shuffle(my_chunks)
+        
+        for chunk_name in my_chunks:
+            dir_path = self.chunk_paths[chunk_name]
+            full_path = os.path.join(dir_path, chunk_name)
+            
+            if not os.path.exists(full_path):
+                continue
+                
+            try:
+                chunk_tensor = torch.load(full_path, map_location='cpu', weights_only=True)
+                metadata = self.chunk_metadata[chunk_name]
+                
+                local_indices = list(range(len(metadata)))
+                random.shuffle(local_indices)
+                
+                for i in local_indices:
+                    tensor_idx, oid = metadata[i]
+                    if tensor_idx >= len(chunk_tensor): continue
+                    
+                    pc = chunk_tensor[tensor_idx]
+                    caption = self.cap_dict[oid]
+                    yield pc, caption
+                    
+            except Exception as e:
+                print(f"Error reading chunk {chunk_name}: {e}")
+                continue
 
 def get_collate_fn(tokenizer, device):
     def collate_fn(batch: List[Tuple[torch.Tensor, str]]):
@@ -95,10 +131,8 @@ def get_collate_fn(tokenizer, device):
         """
         pts_list, captions = zip(*batch)
 
-        # Stack point clouds -> (B, N, 6)
-        pts_batch = torch.stack(pts_list, dim=0).float()
+        pts_batch = torch.stack(pts_list, dim=0).float() 
 
-        # Tokenize captions
         enc = tokenizer(
             list(captions),
             padding=True,
@@ -107,10 +141,9 @@ def get_collate_fn(tokenizer, device):
             return_tensors="pt",
         )
 
-        input_ids = enc["input_ids"].to(device)
-        attention_mask = enc["attention_mask"].to(device)
+        input_ids = enc["input_ids"]
+        attention_mask = enc["attention_mask"]
 
-        # Use input_ids as labels (standard LM training)
         labels = input_ids.clone()
         labels[attention_mask == 0] = -100
 

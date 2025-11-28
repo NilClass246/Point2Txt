@@ -3,27 +3,73 @@ import torch.nn as nn
 
 from transformers import GPT2LMHeadModel
 
+class TransformerMapper(nn.Module):
+    def __init__(self, input_dim: int, output_dim: int, prefix_len: int, num_layers: int = 4, num_heads: int = 8):
+        """
+        Args:
+            input_dim: Dimension of the PointBERT output (e.g., 384)
+            output_dim: Dimension of the GPT-2 embedding (e.g., 768)
+            prefix_len: Number of tokens to generate for the prefix
+        """
+        super().__init__()
+        self.prefix_len = prefix_len
+        self.output_dim = output_dim
+
+        self.linear_in = nn.Linear(input_dim, prefix_len * output_dim)
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=output_dim, 
+            nhead=num_heads, 
+            dim_feedforward=output_dim * 4,
+            batch_first=True, 
+            activation="gelu",
+            norm_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+
+        self.linear_out = nn.Linear(output_dim, output_dim)
+        
+        self.dropout = nn.Dropout(0.1)
+
+    def forward(self, x):
+        """
+        x: (B, input_dim) or (B, 1, input_dim) - Global Point Feature
+        """
+        if x.dim() == 3:
+            x = x.squeeze(1)
+
+        B = x.shape[0]
+
+        x = self.linear_in(x).view(B, self.prefix_len, self.output_dim)
+        
+        x = self.transformer(x)
+        
+        x = self.linear_out(x)
+        x = self.dropout(x)
+        
+        return x
+
 
 class Point2Txt(nn.Module):
     """
-    CLIPCap-style model:
-        point cloud -> point encoder (Point-BERT) -> MLP mapper -> GPT-2 prefix
+    CLIPCap-style model with Transformer Mapper:
+        point cloud -> point encoder (Point-BERT) -> Transformer Mapper -> GPT-2 prefix
     """
-     
+      
     def __init__(self, point_encoder: nn.Module, gpt2: GPT2LMHeadModel, backbone_output_dim: int, prefix_len: int = 10):
         super().__init__()
         self.point_encoder = point_encoder
         self.gpt2 = gpt2
         self.prefix_len = prefix_len
+        
+        gpt_emb_dim = gpt2.config.n_embd
 
-        # Map global point embedding -> (prefix_len * gpt_emb_dim)
-        self.mapper = nn.Sequential(
-            nn.Linear(backbone_output_dim, 1024),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(1024, 1024),
-            nn.ReLU(),
-            nn.Linear(1024, prefix_len * gpt2.config.n_embd)
+        self.mapper = TransformerMapper(
+            input_dim=backbone_output_dim,
+            output_dim=gpt_emb_dim,
+            prefix_len=prefix_len,
+            num_layers=4,
+            num_heads=8
         )
 
     def encode_prefix(self, pts: torch.Tensor) -> torch.Tensor:
@@ -32,12 +78,15 @@ class Point2Txt(nn.Module):
         Returns:
             prefix: (B, prefix_len, gpt_emb_dim)
         """
-        B = pts.size(0)
-        feats = self.point_encoder(pts)  # (B, D)
-        # print(global_feat.shape)
-        global_feat = feats[:, 0, :]
-        mapped = self.mapper(global_feat)      # (B, prefix_len * H)
-        prefix = mapped.view(B, self.prefix_len, self.gpt2.config.n_embd)
+        feats = self.point_encoder(pts)
+        
+        if feats.dim() == 3:
+            global_feat = feats[:, 0, :] 
+        else:
+            global_feat = feats
+
+        prefix = self.mapper(global_feat)
+        
         return prefix
     
     def forward(
