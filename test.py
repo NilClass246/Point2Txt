@@ -18,7 +18,7 @@ class ObjaverseDataset(Dataset):
     def __init__(self, npy_dir, json_path, num_points=8192):
         """
         Args:
-            npy_dir: Folder containing .npy files (e.g., .../npy_processed)
+            npy_dir: Folder containing .npy files (e.g., .../eval_set)
             json_path: Path to .json file { "uid": "caption", ... }
             num_points: Number of points to sample/ensure.
         """
@@ -33,7 +33,7 @@ class ObjaverseDataset(Dataset):
         all_npy = set([f.split('.')[0] for f in os.listdir(npy_dir) if f.endswith('.npy')])
         
         for uid in self.captions_map.keys():
-            if uid in all_npy:
+            if uid + "_8192" in all_npy:
                 self.valid_uids.append(uid)
         
         print(f"Found {len(self.valid_uids)} valid samples (Matching NPY + JSON).")
@@ -44,7 +44,7 @@ class ObjaverseDataset(Dataset):
     def __getitem__(self, idx):
         uid = self.valid_uids[idx]
         caption = self.captions_map[uid]
-        npy_path = os.path.join(self.npy_dir, f"{uid}.npy")
+        npy_path = os.path.join(self.npy_dir, f"{uid}_8192.npy")
         
         try:
             points = np.load(npy_path).astype(np.float32)
@@ -80,7 +80,7 @@ def parse_args():
     
     parser.add_argument("--shapenet_data_path", type=str, default="data/shapenet")
     
-    parser.add_argument("--objaverse_npy_path", type=str, default="data/objaverse/validation/npy_processed")
+    parser.add_argument("--objaverse_npy_path", type=str, default="data/objaverse/validation/eval_set")
     parser.add_argument("--objaverse_json_path", type=str, default="data/objaverse/validation/captions.json")
     
     parser.add_argument("--batch_size", type=int, default=32)
