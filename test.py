@@ -10,7 +10,7 @@ import evaluate
 from sentence_transformers import SentenceTransformer, models
 
 from models.point2txt import Point2Txt
-from models.llm import load_gpt2
+from models.llm import load_llm
 from models.encoder import load_point_encoder
 from dataset.dataset import Cap3DShapeNetPreprocessed, get_collate_fn 
 
@@ -78,6 +78,14 @@ def parse_args():
     parser.add_argument("--encoder_ckpt", type=str, default="models/pointbert/point_bert_v1.2.pt")
     parser.add_argument("--model_path", type=str, default="checkpoints/best_model.pth")
     
+    parser.add_argument("--llm_name", type=str, default="gpt2")
+    parser.add_argument("--freeze_llm", action="store_true")
+    
+    parser.add_argument("--mapper_type", type=str, default="transformer", choices=["mlp", "transformer"])
+    parser.add_argument("--mapper_layers", type=int, default=4)
+    parser.add_argument("--mapper_heads", type=int, default=8)
+    parser.add_argument("--prefix_len", type=int, default=10)
+
     parser.add_argument("--shapenet_data_path", type=str, default="data/shapenet")
     
     parser.add_argument("--objaverse_npy_path", type=str, default="data/objaverse/validation/test_set")
@@ -95,24 +103,27 @@ def generate_batch(model, tokenizer, pts, device, max_len=30, beam_size=1):
     model.eval()
     pts = pts.to(device)
     
-    prefix_embeds = model.encode_prefix(pts)
-    B, PL, H = prefix_embeds.shape
-    attention_mask = torch.ones((B, PL), dtype=torch.long, device=device)
+    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
     
-    output_ids = model.gpt2.generate(
-        inputs_embeds=prefix_embeds,
-        attention_mask=attention_mask,
-        max_new_tokens=max_len,
-        pad_token_id=tokenizer.eos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-        num_beams=beam_size,
+    with torch.amp.autocast('cuda', dtype=dtype):
+        prefix_embeds = model.encode_prefix(pts)
+        B, PL, H = prefix_embeds.shape
+        attention_mask = torch.ones((B, PL), dtype=torch.long, device=device)
         
-        no_repeat_ngram_size=3,
-        repetition_penalty=2.0,
-        length_penalty=1.0,
-        do_sample=False,
-        use_cache=True
-    )
+        output_ids = model.llm.generate(
+            inputs_embeds=prefix_embeds,
+            attention_mask=attention_mask,
+            max_new_tokens=max_len,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            num_beams=beam_size,
+            
+            no_repeat_ngram_size=3,
+            repetition_penalty=2.0,
+            length_penalty=1.0,
+            do_sample=False,
+            use_cache=True
+        )
     
     captions = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
     return [c.strip() for c in captions]
@@ -169,8 +180,17 @@ def main():
     print(f"Evaluating on {device} | Mode: {args.dataset_type}")
 
     point_encoder, backbone_output_dim = load_point_encoder(args.config_path, args.encoder_ckpt, device)
-    gpt2, tokenizer = load_gpt2(device)
-    model = Point2Txt(point_encoder, gpt2, backbone_output_dim, prefix_len=10).to(device)
+    llm, tokenizer = load_llm(args.llm_name, device, freeze=args.freeze_llm)
+    
+    model = Point2Txt(
+        point_encoder=point_encoder, 
+        llm=llm, 
+        backbone_output_dim=backbone_output_dim, 
+        prefix_len=args.prefix_len,
+        mapper_type=args.mapper_type,
+        mapper_layers=args.mapper_layers,
+        mapper_heads=args.mapper_heads
+    ).to(device)
 
     if os.path.exists(args.model_path):
         ckpt = torch.load(args.model_path, map_location=device)

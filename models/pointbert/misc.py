@@ -28,29 +28,40 @@ def fps(xyz, npoint):
     Return:
         sampled_points: [B, npoint, 3]
     """
-    device = xyz.device
-    B, N, C = xyz.shape
-    centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)
-    distance = torch.ones(B, N).to(device) * 1e10
-    farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device)
-    batch_indices = torch.arange(B, dtype=torch.long).to(device)
-    for i in range(npoint):
-        centroids[:, i] = farthest
-        centroid = xyz[batch_indices, farthest, :].view(B, 1, 3)
-        dist = torch.sum((xyz - centroid) ** 2, -1)
-        distance = torch.min(distance, dist)
-        farthest = torch.max(distance, -1)[1]
+    with torch.amp.autocast('cuda', enabled=False):
+        xyz = xyz.float()
+        device = xyz.device
+        B, N, C = xyz.shape
+        
+        centroids = torch.zeros(B, npoint, dtype=torch.long).to(device)
+        distance = torch.ones(B, N).to(device) * 1e10
+        farthest = torch.randint(0, N, (B,), dtype=torch.long).to(device)
+        batch_indices = torch.arange(B, dtype=torch.long).to(device)
+        
+        for i in range(npoint):
+            centroids[:, i] = farthest
+            
+            centroid = xyz[batch_indices, farthest, :].view(B, 1, 3)
+            
+            dist = torch.cdist(xyz, centroid, p=2).squeeze(-1) ** 2
+            
+            distance = torch.min(distance, dist)
+            farthest = torch.max(distance, -1)[1]
     
-    # Return actual points, not just indices, for the Group module
     return index_points(xyz, centroids) 
 
 def square_distance(src, dst):
-    B, N, _ = src.shape
-    _, M, _ = dst.shape
-    dist = -2 * torch.matmul(src, dst.permute(0, 2, 1))
-    dist += torch.sum(src ** 2, -1).view(B, N, 1)
-    dist += torch.sum(dst ** 2, -1).view(B, 1, M)
-    return dist
+    """
+    Input:
+        src: source points, [B, N, C]
+        dst: target points, [B, M, C]
+    Output:
+        dist: per-point square distance, [B, N, M]
+    """
+    with torch.amp.autocast('cuda', enabled=False):
+        src = src.float()
+        dst = dst.float()
+        return torch.cdist(src, dst, p=2) ** 2
 
 def knn_point(nsample, xyz, new_xyz):
     sqrdists = square_distance(new_xyz, xyz)

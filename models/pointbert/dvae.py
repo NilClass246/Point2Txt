@@ -14,19 +14,29 @@ class Group(nn.Module):
             output: B G M 3
             center : B G 3
         '''
+        if xyz.dtype != torch.float32:
+            xyz = xyz.float()
+        
+        if torch.isnan(xyz).any() or torch.isinf(xyz).any():
+            xyz = torch.nan_to_num(xyz, nan=0.0, posinf=1.0, neginf=-1.0)
+        
+        xyz = torch.clamp(xyz, min=-100.0, max=100.0)
+
         B, N, C = xyz.shape
-        # Separate RGB if it exists
         if C > 3:
             data = xyz
-            xyz = data[:,:,:3]
-            rgb = data[:, :, 3:]
+            xyz = data[:,:,:3].contiguous()
+            rgb = data[:, :, 3:].contiguous()
+        else:
+            if not xyz.is_contiguous():
+                xyz = xyz.contiguous()
         
         batch_size, num_points, _ = xyz.shape
         
-        # FPS to get centers of groups
+        # FPS
         center = misc.fps(xyz, self.num_group) # B G 3
 
-        # KNN to get neighbors
+        # KNN
         idx = misc.knn_point(self.group_size, xyz, center) # B G M
         
         assert idx.size(1) == self.num_group
@@ -43,7 +53,6 @@ class Group(nn.Module):
             neighborhood_rgb = rgb.view(batch_size * num_points, -1)[idx, :]
             neighborhood_rgb = neighborhood_rgb.view(batch_size, self.num_group, self.group_size, -1).contiguous()
 
-        # normalize xyz within the group
         neighborhood_xyz = neighborhood_xyz - center.unsqueeze(2)
         
         if C > 3:
@@ -79,11 +88,10 @@ class Encoder(nn.Module):
         bs, g, n, c = point_groups.shape
         point_groups = point_groups.reshape(bs * g, n, c)
         
-        # Mini-PointNet
-        feature = self.first_conv(point_groups.transpose(2, 1))  # BG 256 n
-        feature_global = torch.max(feature, dim=2, keepdim=True)[0]  # BG 256 1
-        feature = torch.cat([feature_global.expand(-1, -1, n), feature], dim=1)  # BG 512 n
-        feature = self.second_conv(feature)  # BG 1024 n
-        feature_global = torch.max(feature, dim=2, keepdim=False)[0]  # BG 1024
+        feature = self.first_conv(point_groups.transpose(2, 1))
+        feature_global = torch.max(feature, dim=2, keepdim=True)[0]
+        feature = torch.cat([feature_global.expand(-1, -1, n), feature], dim=1)
+        feature = self.second_conv(feature)
+        feature_global = torch.max(feature, dim=2, keepdim=False)[0]
         
         return feature_global.reshape(bs, g, self.encoder_channel)

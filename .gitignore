@@ -1,7 +1,9 @@
-**/dataset/data/
-**/dataset/ShapeNet_pcs/
-
 __pycache__/
+
+data/
+
 point_bert_v1.2.pt
 
 checkpoints/
+
+wandb/

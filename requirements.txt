@@ -12,3 +12,4 @@ rouge_score
 sentence-transformers
 scikit-learn
 scipy
+wandb

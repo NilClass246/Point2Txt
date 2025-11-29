@@ -1,27 +1,57 @@
-from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, GPT2LMHeadModel
 
-def load_gpt2(device):
-    model_name = "gpt2"
-    tokenizer = GPT2TokenizerFast.from_pretrained(model_name)
-    gpt2 = GPT2LMHeadModel.from_pretrained(model_name)
-
-    # GPT-2 doesn't have a pad token by default; set pad = eos
+def load_llm(model_name, device, freeze=False):
+    """
+    Loads a Causal LM (GPT-2, Qwen, etc.)
+    """
+    print(f"Loading LLM: {model_name}...")
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    
     if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+        if tokenizer.eos_token:
+            tokenizer.pad_token = tokenizer.eos_token
+            print("Set pad_token = eos_token")
+        else:
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+            print("Added [PAD] token")
 
-    gpt2.resize_token_embeddings(len(tokenizer))
-    gpt2.to(device)
+    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    print(f"Loading model in {dtype}...")
 
-    print("GPT-2 vocab size:", len(tokenizer))
-    print("GPT-2 hidden size:", gpt2.config.n_embd)
+    llm = AutoModelForCausalLM.from_pretrained(
+        model_name, 
+        trust_remote_code=True,
+        torch_dtype=dtype,
+        device_map="auto"
+    )
+    llm.resize_token_embeddings(len(tokenizer))
+    llm.to(device)
 
-    freeze_gpt2 = False  # set False if you want to fine-tune GPT-2
+    try:
+        hidden_size = getattr(llm.config, "n_embd", getattr(llm.config, "hidden_size", None))
+        if hidden_size is None:
+            raise AttributeError("Could not find hidden size (n_embd or hidden_size) in config")
+    except Exception as e:
+        print(f"Warning: Could not auto-detect embedding size: {e}. Assuming 768 or checking manually.")
+        hidden_size = llm.get_input_embeddings().weight.shape[1]
 
-    if freeze_gpt2:
-        for param in gpt2.parameters():
+    print(f"Vocab size: {len(tokenizer)}")
+    print(f"Hidden size: {hidden_size}")
+
+    if freeze:
+        for param in llm.parameters():
             param.requires_grad = False
-        print("GPT-2 frozen (only mapper will train).")
-    else:
-        print("GPT-2 will be fine-tuned.")
+        print(f"LLM ({model_name}) frozen.")
+        
+        llm.gradient_checkpointing_enable() 
+        
+        llm.config.use_cache = False 
+        
+        print(f"Gradient Checkpointing ENABLED. KV Cache DISABLED.")
 
-    return gpt2, tokenizer
+    else:
+        print(f"LLM ({model_name}) will be fine-tuned.")
+
+    return llm, tokenizer

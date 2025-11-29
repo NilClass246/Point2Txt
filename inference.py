@@ -9,7 +9,7 @@ from transformers import GPT2TokenizerFast
 from dataset.dataset import Cap3DShapeNetPreprocessed
 from dataset.visualize import visualize_pointcloud_o3d
 from models.point2txt import Point2Txt
-from models.llm import load_gpt2
+from models.llm import load_llm
 from models.encoder import load_point_encoder
 from models.pointbert.misc import fps
 
@@ -20,6 +20,14 @@ def parse_args():
     parser.add_argument("--config_path", type=str, default="models/pointbert/PointTransformer_8192point_2layer.yaml", help="Path to PointBERT config")
     parser.add_argument("--encoder_ckpt", type=str, default="models/pointbert/point_bert_v1.2.pt", help="Path to PointBERT checkpoint")
     parser.add_argument("--model_path", type=str, default="checkpoints/best_model.pth", help="Path to trained Point2Txt weights")
+    
+    parser.add_argument("--llm_name", type=str, default="gpt2")
+    parser.add_argument("--freeze_llm", action="store_true")
+    
+    parser.add_argument("--mapper_type", type=str, default="transformer", choices=["mlp", "transformer"])
+    parser.add_argument("--mapper_layers", type=int, default=4)
+    parser.add_argument("--mapper_heads", type=int, default=8)
+    parser.add_argument("--prefix_len", type=int, default=10)
     
     # Data Paths
     parser.add_argument("--data_path", type=str, default="data/shapenet", help="Root directory for ShapeNet data")
@@ -53,9 +61,6 @@ def generate_caption_from_points(
     top_k: int = 50,
     repetition_penalty: float = 1.2,
 ):
-    """
-    Robust generation function for CLIPCap/Prefix-tuning style models.
-    """
     model.eval()
 
     # 1. Prepare Points: Ensure (1, N, C) shape
@@ -63,31 +68,34 @@ def generate_caption_from_points(
         pts = pts.unsqueeze(0)
     pts = pts.to(device)
     
-    # 2. Encode Prefix (Soft Prompts)
-    prefix_embeds = model.encode_prefix(pts) # (1, prefix_len, hidden_dim)
-    
-    # 3. Create Attention Mask
-    attention_mask = torch.ones(
-        (prefix_embeds.shape[0], prefix_embeds.shape[1]), 
-        dtype=torch.long, 
-        device=device
-    )
+    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    with torch.amp.autocast('cuda', dtype=dtype):
+        
+        # 2. Encode Prefix (Soft Prompts)
+        prefix_embeds = model.encode_prefix(pts) # (1, prefix_len, hidden_dim)
+        
+        # 3. Create Attention Mask
+        attention_mask = torch.ones(
+            (prefix_embeds.shape[0], prefix_embeds.shape[1]), 
+            dtype=torch.long, 
+            device=device
+        )
 
-    # 4. Generate
-    output_ids = model.gpt2.generate(
-        inputs_embeds=prefix_embeds,
-        attention_mask=attention_mask,
-        max_new_tokens=max_new_tokens,
-        pad_token_id=tokenizer.eos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-        num_beams=num_beams,
-        do_sample=do_sample,
-        temperature=temperature,
-        top_k=top_k,
-        repetition_penalty=repetition_penalty,
-        use_cache=True, 
-        early_stopping=(num_beams > 1)
-    )
+        # 4. Generate
+        output_ids = model.llm.generate(
+            inputs_embeds=prefix_embeds,
+            attention_mask=attention_mask,
+            max_new_tokens=max_new_tokens,
+            pad_token_id=tokenizer.eos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            num_beams=num_beams,
+            do_sample=do_sample,
+            temperature=temperature,
+            top_k=top_k,
+            repetition_penalty=repetition_penalty,
+            use_cache=True, 
+            early_stopping=(num_beams > 1)
+        )
 
     # 5. Decode
     generated_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
@@ -140,10 +148,18 @@ def main():
     )
     
     print("Loading GPT-2...")
-    gpt2, tokenizer = load_gpt2(device)
+    llm, tokenizer = load_llm(args.llm_name, device, freeze=args.freeze_llm)
     
-    # Initialize Wrapper
-    model = Point2Txt(point_encoder, gpt2, backbone_output_dim=backbone_output_dim, prefix_len=10).to(device)
+    # Initialize Wrapper with config
+    model = Point2Txt(
+        point_encoder, 
+        llm, 
+        backbone_output_dim=backbone_output_dim, 
+        prefix_len=args.prefix_len,
+        mapper_type=args.mapper_type,
+        mapper_layers=args.mapper_layers,
+        mapper_heads=args.mapper_heads
+    ).to(device)
 
     # Load Trained Weights
     if path.exists(args.model_path):

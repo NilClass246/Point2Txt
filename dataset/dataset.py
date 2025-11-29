@@ -7,6 +7,18 @@ from torch.utils.data import Dataset, IterableDataset
 from typing import List, Tuple
 from collections import defaultdict
 
+def fix_pointcloud(pc: torch.Tensor, target_n=8192):
+    pc = torch.nan_to_num(pc, nan=0.0)
+    pc[:, :3] = torch.clamp(pc[:, :3], -100, 100)
+    N = pc.shape[0]
+    if N == 0:
+        pc = torch.zeros((target_n, pc.shape[1]), dtype=pc.dtype)
+        N = target_n
+    if N != target_n:
+        idx = torch.randint(0, N, (target_n,), device=pc.device)
+        pc = pc[idx]
+    return pc
+
 class Cap3DShapeNetPreprocessed(Dataset):
     def __init__(self, points_path, ids_path, csv_path, device, transform=None):
         self.pointclouds = torch.load(points_path)
@@ -122,7 +134,7 @@ class ObjaverseStreamingDataset(IterableDataset):
                 print(f"Error reading chunk {chunk_name}: {e}")
                 continue
 
-def get_collate_fn(tokenizer, device):
+def get_collate_fn(tokenizer, device, max_length=32):
     def collate_fn(batch: List[Tuple[torch.Tensor, str]]):
         """
         Collate function to:
@@ -137,7 +149,7 @@ def get_collate_fn(tokenizer, device):
             list(captions),
             padding=True,
             truncation=True,
-            max_length=32,
+            max_length=max_length,
             return_tensors="pt",
         )
 
