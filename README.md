@@ -1,7 +1,7 @@
 <h1 align="center">Point2Text: Lightweight 3D Point Cloud Captioning via Large Language Model</h1>
 
 <p align="center"><img width="100%" src="assets/example.png" /></p>
-This repo is a project for CSC2503 at the University of Toronto
+This repo is a project for CSC2503 at the University of Toronto.
 
 ## 🏞️ Environment Setup
 To set up the environment for training and evaluation, the first step is to install python requirements.
