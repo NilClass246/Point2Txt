@@ -1,5 +1,7 @@
 <h1 align="center">Point2Text: Lightweight 3D Point Cloud Captioning via Large Language Model</h1>
 
+<p align="center"><img width="100%" src="assets/example.png" /></p>
+
 ## 🏞️ Environment Setup
 To set up the environment for training and evaluation, the first step is to install python requirements.
 ```bash
