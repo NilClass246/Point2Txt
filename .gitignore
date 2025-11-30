@@ -7,3 +7,5 @@ point_bert_v1.2.pt
 checkpoints/
 
 wandb/
+
+qualitative_results/

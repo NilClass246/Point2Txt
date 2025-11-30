@@ -65,10 +65,9 @@ def parse_args():
 
 def generate_run_name(args):
     """
-    Generates run name: pointbert-ml32_mlp-l2-pl10_gpt2-finetune
+    Generates run name: pointbert_mlp-l2-pl10_gpt2-ml32-finetune
     """
-    # 1. Encoder part (assuming pointbert for now)
-    enc_str = f"pointbert-ml{args.max_len}"
+    enc_str = "pointbert"
     
     # 2. Mapper part
     if args.mapper_type == "mlp":
@@ -77,10 +76,10 @@ def generate_run_name(args):
         map_str = f"transformer-l{args.mapper_layers}-h{args.mapper_heads}-pl{args.prefix_len}"
         
     # 3. LLM part
-    # Clean up LLM name (remove organization, take last part)
-    llm_short = args.llm_name.split('/')[-1].split('-')[0].lower() # e.g. "Qwen/Qwen..." -> "qwen"
+    llm_short = args.llm_name.split('/')[-1].split('-')[0].lower()
     train_status = "freeze" if args.freeze_llm else "finetune"
-    llm_str = f"{llm_short}-{train_status}"
+    
+    llm_str = f"{llm_short}-ml{args.max_len}-{train_status}"
     
     return f"{enc_str}_{map_str}_{llm_str}"
 
@@ -138,7 +137,7 @@ def validate(model, loader, tokenizer, device, epoch, max_gen_batches=3):
             attention_mask = attention_mask.to(device)
             labels[attention_mask == 0] = -100
 
-        with autocast('cuda'):
+        with autocast('cuda', dtype=torch.bfloat16):
             outputs = model(pts, input_ids, attention_mask, labels)
             total_loss += outputs.loss.item()
         
@@ -146,7 +145,7 @@ def validate(model, loader, tokenizer, device, epoch, max_gen_batches=3):
 
         # Generate specific samples for WandB table
         if batch_idx < max_gen_batches:
-            with autocast('cuda'):
+            with autocast('cuda', dtype=torch.bfloat16):
                 prefix_embeds = model.encode_prefix(pts)
                 B, PL, H = prefix_embeds.shape
                 gen_mask = torch.ones((B, PL), dtype=torch.long, device=device)
@@ -158,8 +157,8 @@ def validate(model, loader, tokenizer, device, epoch, max_gen_batches=3):
                     max_new_tokens=30,
                     pad_token_id=tokenizer.eos_token_id,
                     eos_token_id=tokenizer.eos_token_id,
-                    num_beams=3,
-                    early_stopping=True
+                    num_beams=1,
+                    do_sample=False
                 )
                 
                 gen_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
