@@ -40,6 +40,8 @@ Download the dataset files from [NilClass/Point2Txt](https://huggingface.co/data
 6.  `test_set.zip` (Validation/Test data)
 7.  `test_set_captions.json` (Test captions)
 
+For test and inference, you do not need to download the training shards.
+
 **Move them to `data/objaverse/` and extract:**
 
 ```bash
