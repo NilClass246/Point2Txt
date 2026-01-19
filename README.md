@@ -1,7 +1,7 @@
 <h1 align="center">Point2Text: Lightweight 3D Point Cloud Captioning via Large Language Models</h1>
 
 <p align="center"><img width="100%" src="assets/example.png" /></p>
-This repo is a project for CSC2503 at the University of Toronto. It implements a captioning pipeline connecting a PointBERT encoder with a GPT-2 decoder to generate descriptions for 3D point clouds.
+This repo is a project for CSC2503 at the University of Toronto. It implements a captioning pipeline connecting a PointBERT encoder with a GPT-2 decoder to generate descriptions for 3D point clouds. Please find more details in this [report](./report.pdf)
 
 ## 1. Environment Setup
 To set up the environment for training and evaluation:
